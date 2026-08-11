@@ -834,8 +834,7 @@ TEST_F(LLMCompiledModelFactoryOptionsTest, WhisperPrefillPreparationAddsCrossAtt
 
     EXPECT_TRUE(ov::npuw::util::PrepareWhisperPrefillModel(
                     128,
-                    static_cast<uint32_t>(ov::test::npuw::WhisperConfig{}.max_source_positions),
-                    false /*decompose_sdpa*/)
+                    static_cast<uint32_t>(ov::test::npuw::WhisperConfig{}.max_source_positions))
                     .run_on_model(model));
     auto prepared = model;
 

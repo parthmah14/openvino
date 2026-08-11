@@ -12,8 +12,9 @@ namespace npuw {
 class WhisperInferRequest final : public LLMInferRequest {
 public:
     struct whisper_layer_names {
+        // Tensor name GenAI's cross-attention SDPA decomposition attaches to each decoder
+        // layer's "QK scaled scores" output, alongside a layer-specific "..._N" name.
         static constexpr const char* qk_scores = "cross_attention_qk_scaled_scores";
-        static constexpr const char* qk_scores_ = "cross_attention_qk_scaled_scores_";
     };
 
     explicit WhisperInferRequest(const std::shared_ptr<LLMCompiledModel>& compiled_model)
@@ -31,6 +32,9 @@ protected:
     void infer_generate(ov::SoPtr<ov::ITensor> input_ids);
 
     bool m_need_copy_kvcache = false;
+    // For word-level timestamps: keyed by whatever name m_prefill_out_ports stores the
+    // port under, populated in infer_prefill() - see there for why this can't just be a
+    // generic get_tensor() passthrough.
     std::map<std::string, ov::SoPtr<ov::ITensor>> m_alignment_tensors{};
 };
 

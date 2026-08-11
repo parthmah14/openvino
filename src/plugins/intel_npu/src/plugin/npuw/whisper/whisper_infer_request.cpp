@@ -58,11 +58,16 @@ void ov::npuw::WhisperInferRequest::infer_prefill(ov::SoPtr<ov::ITensor> input_i
                                                  0u,
                                                  m_npuw_llm_compiled_model->m_kvcache_desc.num_stored_tokens);
 
-    // for word-level timestamps
-    auto decomposed_sdpa_size = m_npuw_llm_compiled_model->m_decomposed_sdpa_size;
-    for (size_t idx = 0; idx < decomposed_sdpa_size; idx++) {
-        auto name = whisper_layer_names::qk_scores_ + std::to_string(idx);
-        m_alignment_tensors.insert({name, m_prefill_request->get_tensor(m_prefill_out_ports.at(name))});
+    // For word-level timestamps: the prefill submodel exposes one
+    // "cross_attention_qk_scaled_scores_N" output per decoder layer (GenAI decomposes
+    // cross-attention SDPA and adds these outputs before NPUW ever sees the model), found
+    // by name rather than by a precomputed count since NPUW no longer decomposes anything
+    // itself. Cache them here since get_tensor() is called per-port and cross-attention
+    // (unlike self-attention) only runs during prefill.
+    for (const auto& [name, port] : m_prefill_out_ports) {
+        if (port.get_names().count(WhisperInferRequest::whisper_layer_names::qk_scores) > 0) {
+            m_alignment_tensors.insert({name, m_prefill_request->get_tensor(port)});
+        }
     }
 
     LOG_DEBUG("Done");
@@ -220,20 +225,20 @@ void ov::npuw::WhisperInferRequest::infer() {
     }
 }
 
-// FIXME: Whisper Decompose SDPA
 ov::SoPtr<ov::ITensor> ov::npuw::WhisperInferRequest::get_tensor(const ov::Output<const ov::Node>& port) const {
     const auto& port_names = port.get_names();
 
     if (port_names.count(whisper_layer_names::qk_scores) > 0) {
-        for (auto name : port_names) {
-            if (name.find(whisper_layer_names::qk_scores_) != std::string::npos) {
-                auto alignment_tensor = m_alignment_tensors.at(name);
-                if (!alignment_tensor) {
-                    OPENVINO_THROW(
-                        "Cross-attention qk scaled scores tensor is not available. Please run inference first.");
-                }
-                return alignment_tensor;
+        for (const auto& name : port_names) {
+            auto it = m_alignment_tensors.find(name);
+            if (it == m_alignment_tensors.end()) {
+                continue;
             }
+            if (!it->second) {
+                OPENVINO_THROW(
+                    "Cross-attention qk scaled scores tensor is not available. Please run inference first.");
+            }
+            return it->second;
         }
     }
 
