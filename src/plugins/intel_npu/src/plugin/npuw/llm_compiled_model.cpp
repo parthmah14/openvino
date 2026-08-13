@@ -854,6 +854,13 @@ ov::npuw::LLMCompiledModel::LLMCompiledModel(const std::shared_ptr<ov::Model>& m
         whisper_lhs_seq_size =
             static_cast<uint32_t>(prefill_model->input("encoder_hidden_states").get_partial_shape()[1].get_length());
 
+        // With word-level timestamps, the decoder may receive tokens decoded from the
+        // entire audio chunk in one prefill call, so the static prompt length needs to
+        // reach almost the full KV-cache size rather than the usual (smaller) max prompt.
+        if (ov::npuw::util::has_decomposed_cross_attention_sdpa(prefill_model)) {
+            m_kvcache_desc.max_prompt_size = whisper_kvcache_size - 1;
+        }
+
         ov::npuw::util::PrepareWhisperPrefillModel(m_kvcache_desc.max_prompt_size, whisper_lhs_seq_size)
             .run_on_model(prefill_model);                                          // Whisper decoder model
         ov::npuw::util::PrepareWhisperKVCacheModel().run_on_model(kvcache_model);  // Whisper decoder_with_past model

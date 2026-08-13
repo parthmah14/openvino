@@ -58,12 +58,7 @@ void ov::npuw::WhisperInferRequest::infer_prefill(ov::SoPtr<ov::ITensor> input_i
                                                  0u,
                                                  m_npuw_llm_compiled_model->m_kvcache_desc.num_stored_tokens);
 
-    // For word-level timestamps: the prefill submodel exposes one
-    // "cross_attention_qk_scaled_scores_N" output per decoder layer (GenAI decomposes
-    // cross-attention SDPA and adds these outputs before NPUW ever sees the model), found
-    // by name rather than by a precomputed count since NPUW no longer decomposes anything
-    // itself. Cache them here since get_tensor() is called per-port and cross-attention
-    // (unlike self-attention) only runs during prefill.
+    // For word-level timestamps.
     for (const auto& [name, port] : m_prefill_out_ports) {
         if (port.get_names().count(WhisperInferRequest::whisper_layer_names::qk_scores) > 0) {
             m_alignment_tensors.insert({name, m_prefill_request->get_tensor(port)});

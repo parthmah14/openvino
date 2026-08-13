@@ -643,3 +643,7 @@ bool ov::npuw::util::PrepareWhisperKVCacheModel::run_on_model(const std::shared_
 
     return true;
 }
+
+bool ov::npuw::util::has_decomposed_cross_attention_sdpa(const std::shared_ptr<ov::Model>& model) {
+    return !find_decomposed_cross_attn_score_nodes(model).empty();
+}
