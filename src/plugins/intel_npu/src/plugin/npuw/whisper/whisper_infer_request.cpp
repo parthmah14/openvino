@@ -58,15 +58,12 @@ void ov::npuw::WhisperInferRequest::infer_prefill(ov::SoPtr<ov::ITensor> input_i
                                                  0u,
                                                  m_npuw_llm_compiled_model->m_kvcache_desc.num_stored_tokens);
 
-    // For word-level timestamps. get_any_name() on m_prefill_out_ports' key isn't reliable here since
-    // each of these ports carries both the generic qk_scores marker name and its own indexed
-    // qk_scores_N name - key on the indexed name explicitly, since that's what get_tensor() looks up.
-    for (const auto& [name, port] : m_prefill_out_ports) {
-        const auto& port_names = port.get_names();
-        if (port_names.count(WhisperInferRequest::whisper_layer_names::qk_scores) == 0) {
-            continue;
-        }
-        for (const auto& port_name : port_names) {
+    // For word-level timestamps. These real prefill outputs only carry their own indexed
+    // qk_scores_N name (see add_cross_attention_qk_scaled_scores_outputs_for_whisper), never
+    // the generic qk_scores marker - that marker only gets added to the fake outer-compiled-model
+    // ports in llm_compiled_model.cpp. So key on the indexed name directly, not the marker.
+    for (const auto& [_, port] : m_prefill_out_ports) {
+        for (const auto& port_name : port.get_names()) {
             if (port_name.find(WhisperInferRequest::whisper_layer_names::qk_scores_) != std::string::npos) {
                 m_alignment_tensors.insert({port_name, m_prefill_request->get_tensor(port)});
                 break;
