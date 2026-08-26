@@ -110,7 +110,9 @@ TEST_P(PrepareWhisperModelTest, PrefillPreparationHandlesFusedAndDecomposedCross
     }
 
     WhisperConfig cfg;
-    ASSERT_TRUE(ov::npuw::util::PrepareWhisperPrefillModel(128, static_cast<uint32_t>(cfg.max_source_positions))
+    ASSERT_TRUE(ov::npuw::util::PrepareWhisperPrefillModel(128,
+                                                           static_cast<uint32_t>(cfg.max_source_positions),
+                                                           false /*decompose_sdpa*/)
                     .run_on_model(model));
 
     EXPECT_TRUE(has_input_name(model, "attention_mask"));
