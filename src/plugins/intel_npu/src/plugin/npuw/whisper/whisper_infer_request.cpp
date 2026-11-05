@@ -230,16 +230,14 @@ void ov::npuw::WhisperInferRequest::infer() {
 ov::SoPtr<ov::ITensor> ov::npuw::WhisperInferRequest::get_tensor(const ov::Output<const ov::Node>& port) const {
     const auto& port_names = port.get_names();
 
-    if (port_names.count(whisper_layer_names::qk_scores) > 0) {
-        for (auto name : port_names) {
-            if (name.find(whisper_layer_names::qk_scores_) != std::string::npos) {
-                auto alignment_tensor = m_alignment_tensors.at(name);
-                if (!alignment_tensor) {
-                    OPENVINO_THROW(
-                        "Cross-attention qk scaled scores tensor is not available. Please run inference first.");
-                }
-                return alignment_tensor;
+    for (const auto& name : port_names) {
+        if (name.find(whisper_layer_names::qk_scores_) != std::string::npos) {
+            auto alignment_tensor = m_alignment_tensors.at(name);
+            if (!alignment_tensor) {
+                OPENVINO_THROW(
+                    "Cross-attention qk scaled scores tensor is not available. Please run inference first.");
             }
+            return alignment_tensor;
         }
     }
 
