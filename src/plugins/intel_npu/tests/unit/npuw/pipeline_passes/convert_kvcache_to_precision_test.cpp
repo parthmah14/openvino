@@ -10,6 +10,7 @@
 #include <map>
 #include <cstring>
 #include <regex>
+#include <set>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -1185,6 +1186,73 @@ TEST_F(ConvertKVCacheToPrecisionPassTest, KVCacheCompressionConfigParsing_Unknow
     ov::AnyMap props = {{"NPUW_LLM_KV_CACHE_COMPRESSION", "KEY:UNKNOWN:BY_TOKEN,VALUE:SYM:BY_TOKEN"}};
     props.emplace(ov::hint::kv_cache_precision.name(), ov::element::i8);
     EXPECT_THROW(create_compiled_model(props, recorder), ov::Exception);
+}
+
+// The optional precision field sets the storage type of the cache: an i4 value cache with an i8 key cache.
+TEST_F(ConvertKVCacheToPrecisionPassTest, KVCacheCompressionConfigParsing_I4Value) {
+    // Element types of the key and value cache ports: past inputs of the generate model, present outputs of
+    // the prefill model (which has no past inputs).
+    auto kv_types = [](const auto& ports, auto is_key, auto is_value) {
+        std::set<ov::element::Type> key_types, value_types;
+        for (const auto& port : ports) {
+            if (any_name_contains(port, "/scale") || any_name_contains(port, "/zp")) {
+                continue;
+            }
+            for (const auto& name : port.get_names()) {
+                if (is_key(name).has_value()) {
+                    key_types.insert(port.get_element_type());
+                } else if (is_value(name).has_value()) {
+                    value_types.insert(port.get_element_type());
+                }
+            }
+        }
+        return std::make_pair(key_types, value_types);
+    };
+    auto count_dynamic_quantize = [](const std::shared_ptr<ov::Model>& model) {
+        const auto ops = model->get_ops();
+        return std::count_if(ops.begin(), ops.end(), [](const auto& op) {
+            return std::string(op->get_type_name()) == "DynamicQuantize";
+        });
+    };
+    const std::set<ov::element::Type> expected_key{ov::element::i8};
+    const std::set<ov::element::Type> expected_value{ov::element::i4};
+
+    for (const auto* config :
+         {"KEY:SYM:BY_TOKEN,VALUE:SYM:BY_TOKEN:I4", "KEY:ASYM:BY_TOKEN:I8,VALUE:ASYM:BY_TOKEN:I4"}) {
+        RecordingFactory recorder;
+        ov::AnyMap props = {{"NPUW_LLM_KV_CACHE_COMPRESSION", config}};
+        props.emplace(ov::hint::kv_cache_precision.name(), ov::element::i8);
+        ASSERT_NO_THROW(create_compiled_model(props, recorder)) << config;
+
+        const auto& generate = require_sub_model_containing(recorder, "_kv").model;
+        const auto& prefill = require_sub_model(recorder, "_prefill").model;
+
+        const auto [past_key, past_value] = kv_types(generate->inputs(),
+                                                     ov::npuw::util::isPastKeyValuesKey,
+                                                     ov::npuw::util::isPastKeyValuesValue);
+        EXPECT_EQ(past_key, expected_key) << config << " generate past key";
+        EXPECT_EQ(past_value, expected_value) << config << " generate past value";
+
+        const auto [present_key, present_value] = kv_types(prefill->outputs(),
+                                                           ov::npuw::util::isPresentKeyValuesKey,
+                                                           ov::npuw::util::isPresentKeyValuesValue);
+        EXPECT_EQ(present_key, expected_key) << config << " prefill present key";
+        EXPECT_EQ(present_value, expected_value) << config << " prefill present value";
+
+        EXPECT_EQ(count_dynamic_quantize(generate), 0) << config << " generate model";
+        EXPECT_EQ(count_dynamic_quantize(prefill), 0) << config << " prefill model";
+    }
+}
+
+TEST_F(ConvertKVCacheToPrecisionPassTest, KVCacheCompressionConfigParsing_UnknownPrecision) {
+    for (const auto* config : {"KEY:SYM:BY_TOKEN,VALUE:SYM:BY_TOKEN:I2",
+                               "KEY:SYM:BY_TOKEN:I4,VALUE:SYM:BY_TOKEN",
+                               "KEY:SYM:BY_TOKEN,VALUE:SYM:BY_TOKEN:I4:I8"}) {
+        RecordingFactory recorder;
+        ov::AnyMap props = {{"NPUW_LLM_KV_CACHE_COMPRESSION", config}};
+        props.emplace(ov::hint::kv_cache_precision.name(), ov::element::i8);
+        EXPECT_THROW(create_compiled_model(props, recorder), ov::Exception) << config;
+    }
 }
 
 TEST_F(ConvertKVCacheToPrecisionPassTest, KVCacheCompressionConfigParsing_UnknownGranularity) {
