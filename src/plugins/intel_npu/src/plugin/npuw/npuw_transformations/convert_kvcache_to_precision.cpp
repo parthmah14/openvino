@@ -308,6 +308,14 @@ ov::element::Type optimize_kv_cache_storage(const std::shared_ptr<ov::Model>& mo
 
 namespace ov::npuw {
 
+ov::element::Type kv_cache_value_storage_type(const ov::element::Type kv_cache_precision,
+                                              const std::string& kv_cache_compression_config) {
+    if (kv_cache_precision != ov::element::i8 && kv_cache_precision != ov::element::u8) {
+        return kv_cache_precision;
+    }
+    return parse_kv_cache_compression_config(kv_cache_compression_config).value_precision.value_or(ov::element::i8);
+}
+
 ConvertKVCacheToPrecision::ConvertKVCacheToPrecision(const ov::element::Type lptype,
                                                      bool v_tensors_transposed,
                                                      const std::string& kv_cache_compression_config)

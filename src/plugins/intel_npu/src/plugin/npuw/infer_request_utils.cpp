@@ -28,6 +28,10 @@ ov::SoPtr<ov::ITensor> ov::npuw::util::make_tensor_slice(ov::SoPtr<ov::ITensor> 
                     end_pos,
                     ") is out of range for extent ",
                     shape[dim]);
+    if (tensor->get_element_type().bitwidth() < 8) {
+        // OV has no ROI for sub-byte tensors, use a u8 view of the packed bytes instead
+        return ov::npuw::util::view(tensor, dim, start_pos, end_pos - start_pos);
+    }
     ov::Shape start_shape(std::vector<size_t>(shape.size(), 0u));
     start_shape[dim] = start_pos;
     ov::Shape end_shape = shape;
@@ -118,6 +122,14 @@ void ov::npuw::util::copy_tensor_by_dim(ov::SoPtr<ov::ITensor> src_tensor,
                                         ov::SoPtr<ov::ITensor> dst_tensor,
                                         uint32_t kv_dim_src,
                                         uint32_t kv_dim_dst) {
+    if (src_tensor->get_element_type().bitwidth() < 8 || dst_tensor->get_element_type().bitwidth() < 8) {
+        // Sub-byte tensors are copied as bytes, which is exact as long as the innermost dimension is not cut
+        const auto rank = src_tensor->get_shape().size();
+        NPUW_ASSERT(kv_dim_src + 1 < rank && kv_dim_dst + 1 < rank &&
+                    "a sub-byte KV-cache can't be copied along its innermost dimension");
+        src_tensor = ov::npuw::util::as_bytes(src_tensor);
+        dst_tensor = ov::npuw::util::as_bytes(dst_tensor);
+    }
     if (kv_dim_src != kv_dim_dst) {
         // new case - do a generic copy for now (in fact it is a permute)
         // Example:

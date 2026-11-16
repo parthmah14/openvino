@@ -135,7 +135,7 @@ void LLMContinuousKVCacheStrategy::on_generate_variant_switch(const std::shared_
         auto dst_slice = uu::make_tensor_slice(dst, kv_dim, 0u, num_stored);
 
         // Copy via a temporary CPU buffer to avoid aliasing (src and dst share backing memory).
-        auto tmp = uu::allocMem(src->get_element_type(), src_slice->get_shape(), "CPU", nullptr);
+        auto tmp = uu::allocMem(src_slice->get_element_type(), src_slice->get_shape(), "CPU", nullptr);
         NPUW_ASSERT(tmp._ptr && "CPU buffer allocation for KV copy failed — check memory availability");
         src_slice->copy_to(tmp._ptr);
         uu::copy_tensor_by_dim(tmp, dst_slice, kv_dim, kv_dim);
@@ -262,7 +262,7 @@ void LLMContinuousKVCacheStrategy::continue_prefill(uint32_t keep, uint32_t delt
             // The temporary lives inside the loop body, so only the tensors in
             // flight hold staging memory at any moment rather than the whole
             // preserved prefix at once.
-            auto temp = uu::allocMem(src->get_element_type(), src_slice->get_shape(), "CPU", nullptr);
+            auto temp = uu::allocMem(src_slice->get_element_type(), src_slice->get_shape(), "CPU", nullptr);
             NPUW_ASSERT(temp._ptr && "CPU buffer allocation for KV repack failed — check memory availability");
             src_slice->copy_to(temp._ptr);
             uu::copy_tensor_by_dim(temp, dst_slice, entry.src_dim, entry.dst_dim);

@@ -1244,6 +1244,23 @@ TEST_F(ConvertKVCacheToPrecisionPassTest, KVCacheCompressionConfigParsing_I4Valu
     }
 }
 
+// A transposed V has the sequence innermost, which an i4 value cache can't slice: it keeps the original layout.
+TEST_F(ConvertKVCacheToPrecisionPassTest, KVCacheCompressionConfigParsing_I4ValueIsNotTransposed) {
+    for (const auto& [config, transposed] :
+         std::vector<std::pair<std::string, bool>>{{"KEY:SYM:BY_TOKEN,VALUE:SYM:BY_TOKEN", true},
+                                                   {"KEY:SYM:BY_TOKEN,VALUE:SYM:BY_TOKEN:I4", false}}) {
+        RecordingFactory recorder;
+        ov::AnyMap props = {{"NPUW_LLM_KV_CACHE_COMPRESSION", config}, {"NPUW_LLM_OPTIMIZE_V_TENSORS", "YES"}};
+        props.emplace(ov::hint::kv_cache_precision.name(), ov::element::i8);
+        std::shared_ptr<TestableLLMCompiledModel> compiled;
+        ASSERT_NO_THROW(compiled = create_testable_model(props, recorder)) << config;
+        EXPECT_EQ(compiled->kvcache_desc().v_tensors_transposed_gen, transposed) << config;
+        if (!transposed) {
+            EXPECT_FALSE(compiled->kvcache_desc().v_tensors_transposed_pre) << config;
+        }
+    }
+}
+
 TEST_F(ConvertKVCacheToPrecisionPassTest, KVCacheCompressionConfigParsing_UnknownPrecision) {
     for (const auto* config : {"KEY:SYM:BY_TOKEN,VALUE:SYM:BY_TOKEN:I2",
                                "KEY:SYM:BY_TOKEN:I4,VALUE:SYM:BY_TOKEN",

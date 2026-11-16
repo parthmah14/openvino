@@ -509,20 +509,41 @@ void ov::npuw::util::gather_cb4(const ov::SoPtr<ov::ITensor>& src,
     }
 }
 
+ov::SoPtr<ov::ITensor> ov::npuw::util::as_bytes(const ov::SoPtr<ov::ITensor>& src) {
+    const auto type = src->get_element_type();
+    if (type.bitwidth() >= 8) {
+        return src;
+    }
+    // Sub-byte tensors have no ROI or strides, so this one is dense
+    auto shape = src->get_shape();
+    NPUW_ASSERT(!shape.empty() && (shape.back() * type.bitwidth()) % 8 == 0 &&
+                "the innermost dimension of a sub-byte tensor must hold a whole number of bytes");
+    shape.back() = shape.back() * type.bitwidth() / 8;
+    ov::Tensor bytes(ov::element::u8, shape, src->data());
+    return ov::get_tensor_impl(bytes);
+}
+
 ov::SoPtr<ov::ITensor> ov::npuw::util::view(const ov::SoPtr<ov::ITensor>& src,
                                             const ov::npuw::util::View& from,
                                             const ov::npuw::util::View& to) {
     const auto type = src->get_element_type();
     NPUW_ASSERT(from.size() == to.size());
 
-    // Sub-byte views are not supported here
-    NPUW_ASSERT(type != ov::element::u4 && type != ov::element::i4);
-
     // Bounds guard: from[d] <= to[d] <= shape[d] (prevents OOB views and unsigned wrap below).
     const auto& shape = src->get_shape();
     NPUW_ASSERT(from.size() == shape.size());
     for (std::size_t d = 0; d < from.size(); ++d) {
         NPUW_ASSERT(from[d] <= to[d] && to[d] <= shape[d]);
+    }
+
+    if (type.bitwidth() < 8) {
+        // Sub-byte elements are packed along the innermost dimension: view the bytes along the outer ones
+        NPUW_ASSERT(!shape.empty() && from.back() == 0 && to.back() == shape.back() &&
+                    "a sub-byte tensor can't be viewed along its innermost dimension");
+        const auto bytes = as_bytes(src);
+        View bytes_to = to;
+        bytes_to.back() = bytes->get_shape().back();
+        return view(bytes, from, bytes_to);
     }
 
     const auto num_dims = from.size();

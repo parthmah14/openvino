@@ -102,7 +102,12 @@ void gather_cb4(const ov::SoPtr<ov::ITensor>& src,
                 const ov::SoPtr<ov::ITensor>& idx,
                 const ov::SoPtr<ov::ITensor>& dst);
 
+// Views a sub-byte tensor (e.g. i4) as u8 with its innermost dimension packed into bytes,
+// so it can be sliced and copied along the outer dimensions. Other tensors are returned as is.
+ov::SoPtr<ov::ITensor> as_bytes(const ov::SoPtr<ov::ITensor>& src);
+
 using View = std::vector<std::size_t>;
+// A sub-byte tensor can't be viewed along its innermost dimension; its view is a u8 one (see as_bytes)
 ov::SoPtr<ov::ITensor> view(const ov::SoPtr<ov::ITensor>& src, const View& from, const View& to);
 
 ov::SoPtr<ov::ITensor> view(const ov::SoPtr<ov::ITensor>& src, std::size_t dim, std::size_t offset, std::size_t len);

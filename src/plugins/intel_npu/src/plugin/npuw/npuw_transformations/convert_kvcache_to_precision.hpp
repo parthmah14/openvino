@@ -14,6 +14,11 @@ namespace ov::npuw {
 
 ov::element::Type optimize_kv_cache_storage(const std::shared_ptr<ov::Model>& model);
 
+// Element type the value cache is stored in for the given KV_CACHE_PRECISION and
+// NPUW_LLM_KV_CACHE_COMPRESSION config.
+ov::element::Type kv_cache_value_storage_type(const ov::element::Type kv_cache_precision,
+                                              const std::string& kv_cache_compression_config);
+
 class ConvertKVCacheToPrecision : public ov::pass::ModelPass {
     ov::element::Type m_lp_type;
     bool m_v_tensors_transposed = false;

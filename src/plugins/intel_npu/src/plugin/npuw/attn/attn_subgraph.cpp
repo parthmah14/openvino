@@ -658,8 +658,10 @@ ov::npuw::v1::subgraphs::RuntimeBehaviorFactory make_runtime_factory() {
                                     // Strided I/O is available for non-last pyramid models compiled with
                                     // enable_strides_for. The last model reuses the main compiled subgraph (compiled
                                     // without enable_strides_for), so it always falls back to the copy path.
-                                    const bool use_tensor_view =
-                                        pyramid->_can_use_tensor_view && (pyramid_id < pyramid->num_models() - 1);
+                                    // A sub-byte KV-cache can't be bound as a strided view, it is copied.
+                                    const bool use_tensor_view = pyramid->_can_use_tensor_view &&
+                                                                 (pyramid_id < pyramid->num_models() - 1) &&
+                                                                 tensor->get_element_type().bitwidth() >= 8;
 
                                     const auto& input_shape = tensor->get_shape();
                                     // The shared pyramid_selector's past_len is sized for the global/non-SWA
@@ -1161,7 +1163,7 @@ ov::npuw::v1::subgraphs::RuntimeBehaviorFactory make_runtime_factory() {
                                                            kv_offset,
                                                            tile_length)) {
                                 request->set_tensor(model->inputs()[tile_in.k], k_source);
-                            } else if (hfa_desc->_can_use_tensor_view) {
+                            } else if (hfa_desc->_can_use_tensor_view && k_source->get_element_type().bitwidth() >= 8) {
                                 OPENVINO_ASSERT(k_tile_buffer->get_element_type() == k_source->get_element_type(),
                                                 "HFA K tile dtype mismatch: source=",
                                                 k_source->get_element_type(),
@@ -1180,7 +1182,7 @@ ov::npuw::v1::subgraphs::RuntimeBehaviorFactory make_runtime_factory() {
                                                            kv_offset,
                                                            tile_length)) {
                                 request->set_tensor(model->inputs()[tile_in.v], v_source);
-                            } else if (hfa_desc->_can_use_tensor_view) {
+                            } else if (hfa_desc->_can_use_tensor_view && v_source->get_element_type().bitwidth() >= 8) {
                                 OPENVINO_ASSERT(v_tile_buffer->get_element_type() == v_source->get_element_type(),
                                                 "HFA V tile dtype mismatch: source=",
                                                 v_source->get_element_type(),
