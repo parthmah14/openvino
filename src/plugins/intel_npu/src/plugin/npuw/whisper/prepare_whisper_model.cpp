@@ -884,3 +884,26 @@ bool ov::npuw::util::PrepareWhisperKVCacheModel::run_on_model(const std::shared_
 bool ov::npuw::util::has_decomposed_cross_attention_sdpa(const std::shared_ptr<ov::Model>& model) {
     return !find_decomposed_cross_attn_score_nodes(model).empty();
 }
+
+void ov::npuw::util::normalize_whisper_attention_output_names(const std::shared_ptr<ov::Model>& model) {
+    static const std::string marker = "cross_attention_qk_scaled_scores";
+    static const std::regex indexed_name("^cross_attention_qk_scaled_scores_[0-9]+$");
+    for (const auto& result : model->get_results()) {
+        auto output = result->output(0);
+        auto names = output.get_names();
+        if (names.count(marker) == 0) {
+            continue;
+        }
+        bool has_indexed_name = false;
+        for (const auto& name : names) {
+            if (std::regex_match(name, indexed_name)) {
+                has_indexed_name = true;
+                break;
+            }
+        }
+        if (has_indexed_name) {
+            names.erase(marker);
+            output.set_names(names);
+        }
+    }
+}

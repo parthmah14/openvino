@@ -1042,6 +1042,9 @@ ov::npuw::LLMCompiledModel::LLMCompiledModel(const std::shared_ptr<ov::Model>& m
         prepare_prefill_model.run_on_model(prefill_model);                         // Whisper decoder model
         ov::npuw::util::PrepareWhisperKVCacheModel().run_on_model(kvcache_model);  // Whisper decoder_with_past model
 
+        ov::npuw::util::normalize_whisper_attention_output_names(prefill_model);
+        ov::npuw::util::normalize_whisper_attention_output_names(kvcache_model);
+
         // FIXME: Whisper Decompose SDPA
         // WA: to mock new "cross_attention_qk_scaled_scores" outputs in original model
         if (whisper_decompose_sdpa) {

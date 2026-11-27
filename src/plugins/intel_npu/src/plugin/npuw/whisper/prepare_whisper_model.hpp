@@ -49,6 +49,8 @@ public:
 // as NPUW's own decomposition below (NPU) having already run on this model.
 bool has_decomposed_cross_attention_sdpa(const std::shared_ptr<ov::Model>& model);
 
+void normalize_whisper_attention_output_names(const std::shared_ptr<ov::Model>& model);
+
 }  // namespace util
 }  // namespace npuw
 }  // namespace ov

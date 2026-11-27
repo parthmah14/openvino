@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 #include "llm_test_helpers.hpp"
 #include "openvino/op/ops.hpp"
@@ -136,6 +137,30 @@ TEST_P(PrepareWhisperModelTest, KVCachePreparationHandlesFusedAndDecomposedCross
     EXPECT_TRUE(has_input_name(model, "past_key_values.0.encoder.value"));
     EXPECT_TRUE(has_input_name(model, "past_key_values.1.encoder.key"));
     EXPECT_TRUE(has_input_name(model, "past_key_values.1.encoder.value"));
+}
+
+TEST(PrepareWhisperModelNames, NormalizesOnlyIndexedAttentionOutputsOnModelCopies) {
+    using namespace ov::op;
+    const std::string marker = "cross_attention_qk_scaled_scores";
+    auto input = std::make_shared<v0::Parameter>(ov::element::f32, ov::Shape{1});
+    auto first = std::make_shared<v1::Add>(input, input);
+    auto second = std::make_shared<v1::Multiply>(input, input);
+    auto other = std::make_shared<v1::Subtract>(input, input);
+    first->output(0).set_names({marker, marker + "_0", "first_alias"});
+    second->output(0).set_names({marker, marker + "_1"});
+    other->output(0).set_names({marker, marker + "_other"});
+    auto model = std::make_shared<ov::Model>(ov::OutputVector{first, second, other}, ov::ParameterVector{input});
+    auto prefill = model->clone();
+    auto generate = model->clone();
+
+    for (const auto& internal : {prefill, generate}) {
+        ov::npuw::util::normalize_whisper_attention_output_names(internal);
+        EXPECT_EQ(internal->output(0).get_names(), (std::unordered_set<std::string>{marker + "_0", "first_alias"}));
+        EXPECT_EQ(internal->output(1).get_names(), (std::unordered_set<std::string>{marker + "_1"}));
+        EXPECT_EQ(internal->output(2).get_names(), (std::unordered_set<std::string>{marker, marker + "_other"}));
+    }
+    EXPECT_EQ(model->output(0).get_names(), (std::unordered_set<std::string>{marker, marker + "_0", "first_alias"}));
+    EXPECT_EQ(model->output(1).get_names(), (std::unordered_set<std::string>{marker, marker + "_1"}));
 }
 
 INSTANTIATE_TEST_SUITE_P(CrossAttentionShape,
